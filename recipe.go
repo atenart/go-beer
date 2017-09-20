@@ -6,135 +6,62 @@ This file is licensed under the terms of the GNU General Public License version
 express or implied.
 */
 
-// The package beer helps making beer recipes and provides functions to compute
-// various parameters. Amounts are in grams, volumes in liter, yield and
-// attenuations in percentages and times in seconds.
+/*
+The package beer helps making beer recipes and provides functions to compute
+various parameters given a BeerXML formated recipe.
+
+Units (follow the Beer XML specification):
+- Weights in kilograms (kg).
+- Volumes in liters (l).
+- Temperatures in degree Celsius (°C).
+- Times in minutes (m).
+- Pressures in kilopascals (kPa).
+*/
 package beer
 
+import "github.com/atenart/go-beer/beerxml"
+
 type Recipe struct {
-	Name		string
-	Description	string
-	Volume		float64
-	Malts		[]*Malt
-	Hops		[]*Hop
-	Yeasts		[]*Yeast
-	Steps		[]*Step
-	MeasuredOG	float64
-	MeasuredFG	float64
-	Settings	Settings
+	Recipe		*beerxml.Recipe
+	Ideal		bool
 }
 
-type Malt struct {
-	Name		string
-	EBC		float64
-	PPG		float64
-	Amount		float64
-}
-
-type Hop struct {
-	Name		string
-	Alpha		float64
-	Amount		float64
-	Time		float64
-	DryHop		bool
-}
-
-type Yeast struct {
-	Name		string
-	Attenuation	float64
-	Amount		float64
-}
-
-type Step struct {
-	Temperature	float64
-	Time		float64
-}
-
-type Settings struct {
-	Efficiency	float64
-	EvaporationLoss	float64
-	GrainLoss	float64
-}
-
-// Start a new recipe.
-func NewRecipe(name, description string) *Recipe {
+// Start a new beer recipe.
+func NewRecipe(r *beerxml.Recipe) *Recipe {
 	return &Recipe{
-		Name:		name,
-		Description:	description,
-		Settings:	Settings{70, 8, 5},
-		MeasuredOG:	-1,
-		MeasuredFG:	-1,
+		Recipe:	r,
+		Ideal:	false,
 	}
 }
 
-// Set the equipment settings.
-func (r *Recipe) SetSettings(efficiency, evaporationLoss, grainLoss float64) {
-	r.Settings.Efficiency = efficiency
-	r.Settings.EvaporationLoss = evaporationLoss
-	r.Settings.GrainLoss = grainLoss
-}
-
-// Set the expected recipe volume at the end of the brewing.
-func (r *Recipe) SetVolume(volume float64) {
-	r.Volume = volume
-}
-
-// Add a cooking step.
-func (r *Recipe) AddStep(temperature, time float64) {
-	r.Steps = append(r.Steps, &Step{
-		Temperature:	temperature,
-		Time:		time,
-	})
-}
-
-// Add a malt to a recipe.
-func (r *Recipe) AddMalt(name string, ebc, ppg, amount float64) {
-	r.Malts = append(r.Malts, &Malt{
-		Name:	name,
-		EBC:	ebc,
-		PPG:	ppg,
-		Amount:	amount,
-	})
-}
-
-// Add an hop to a recipe.
-func (r *Recipe) AddHop(name string, alpha, amount, time float64, dryHop bool) {
-	r.Hops = append(r.Hops, &Hop{
-		Name:	name,
-		Alpha:	alpha,
-		Amount:	amount,
-		Time:	time,
-		DryHop:	dryHop,
-	})
-}
-
-// Add a yeast to a recipe.
-func (r *Recipe) AddYeast(name string, attenuation, amount float64) {
-	r.Yeasts = append(r.Yeasts, &Yeast{
-		Name:		name,
-		Attenuation:	attenuation,
-		Amount:		amount,
-	})
-}
-
-// Set the measured original gravity
-func (r *Recipe) SetOG(OG float64) {
-	r.MeasuredOG = OG
-}
-
-// Set the measured final gravity
-func (r *Recipe) SetFG(FG float64) {
-	r.MeasuredFG = FG
-}
-
-// Get the original gravity.
+// Return the original gravity.
 func (r *Recipe) OG() float64 {
-	if r.MeasuredOG != -1 { return r.MeasuredOG }
+	if r.Recipe.OG != 0 { return r.Recipe.OG }
 	return r.EstimatedOG()
 }
 
-// Get the final gravity.
+// Return the final gravity.
 func (r *Recipe) FG() float64 {
-	if r.MeasuredFG != -1 { return r.MeasuredFG }
+	if r.Recipe.FG != 0 { return r.Recipe.FG }
 	return r.EstimatedFG()
+}
+
+// Return the brewing efficiency.
+func (r *Recipe) Efficiency() float64 {
+	if r.Ideal { return 1 }
+
+	if r.Recipe.OG == 0 {
+		if r.Recipe.Efficiency != 0 { return r.Recipe.Efficiency / 100 }
+		return 0.7	// 70% is a safe default
+	}
+
+	return (r.Recipe.OG - 1) * 1000 / ((r.IdealOG() - 1) * 1000)
+}
+
+// Return the evaporation rate.
+func (r *Recipe) EvapRate() float64 {
+	if r.Recipe.Equipment.EvapRate != 0 {
+		return r.Recipe.Equipment.EvapRate / 100
+	}
+	return 1	// 1l/h
 }
